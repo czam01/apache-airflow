@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creates an Airflow instance for orchestration.
+Parameters:
+    EnvironmentName:
+        Description: "A prefix for the resource names."
+        Type: String
+        Default: BigData-Production
+Mappings:
+  RegionMap:
+    us-east-1:
+      UbuntuAmi: "ami-0ac019f4fcb7cb7e6" #Ubuntu 18.04
+      RegionAlias: "Virginia"
+
+Resources:
+    Ec2InstanceAirflow:
+        Type: AWS::EC2::Instance
+        DeletionPolicy: Delete
+        Properties:
+            IamInstanceProfile: PRODUCTION-BigData-Airflow-Role-Ec2
+            InstanceInitiatedShutdownBehavior: terminate
+            SubnetId: subnet-xxxxx
+            InstanceType: "t2.medium"
+            ImageId: !FindInMap [ RegionMap, !Ref "AWS::Region" , UbuntuAmi ]
+            SecurityGroupIds: 
+                - "sg-xxxxxx"
+            KeyName: "Key-BigData"
+            Tags:
+            - Key: Name
+              Value: !Sub "Airflow-${EnvironmentName}"
+            UserData:
+                Fn::Base64: !Sub |
+                    #!/bin/bash
+                    apt-get update -y
+                    apt install awscli -y
+                    apt install python3-pip -y
+                    pip3 install pipenv
+                    instance_id=$(curl http://169.254.169.254/latest/meta-data/instance-id)
+                    arn_target=$(aws elbv2 describe-target-groups --region us-east-1 |grep stg-airflow-target |grep arn | cut -c32-130)
+                    aws elbv2 register-targets --target-group-arn $arn_target --region us-east-1 --targets Id=$instance_id,Port=8080
+                    PYTHON_BIN_PATH="$(python3 -m site --user-base)/bin"
+                    PATH="$PATH:$PYTHON_BIN_PATH"
+                    cd /
+                    mkdir airflow
+                    cd /airflow
+                    aws s3 cp --recursive s3://bucket-con-dags-airflow/ $(pwd)
+                    source scripts/variables.sh
+                    sh scripts/setup.sh
+                    pipenv --three install
+                    pipenv run airflow initdb
+                    pipenv run airflow scheduler > ~/scheduler.log 2>&1 & 
+                    pipenv run airflow webserver
