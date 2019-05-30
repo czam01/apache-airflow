@@ -19,7 +19,7 @@ aws s3 cp --recursive s3://Your_Bucket/ $(pwd)
 source scripts/variables.sh
 echo "source $USER_HOME/airflow/scripts/variables.sh" >> $USER_HOME/.bashrc
 # Script to create airflow.cfg
-sh scripts/local_setup.sh
+sh local_setup.sh
 # Necessary for newer versions of airflow
 export SLUGIFY_USES_TEXT_UNIDECODE=yes
 export PIPENV_VENV_IN_PROJECT=True
